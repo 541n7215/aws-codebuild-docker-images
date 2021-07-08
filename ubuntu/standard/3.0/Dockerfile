@@ -1,4 +1,4 @@
-# Copyright 2019-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright 2019-2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #
 # Licensed under the Amazon Software License (the "License"). You may not use this file except in compliance with the License.
 # A copy of the License is located at
@@ -72,7 +72,7 @@ RUN set -ex \
 
 # Install GeckoDriver
 RUN set -ex \
-    && curl -s https://api.github.com/repos/mozilla/geckodriver/releases/latest | jq -r '.assets[] | select(.browser_download_url | contains("linux64")).browser_download_url' | wget -O /tmp/geckodriver-latest-linux64.tar.gz -qi - \
+    && curl -s https://api.github.com/repos/mozilla/geckodriver/releases/latest | jq -r '.assets[] | select(.browser_download_url | endswith("linux64.tar.gz")).browser_download_url' | wget -O /tmp/geckodriver-latest-linux64.tar.gz -qi - \
     && tar -xzf /tmp/geckodriver-latest-linux64.tar.gz -C /opt \
     && rm /tmp/geckodriver-latest-linux64.tar.gz \
     && chmod 755 /opt/geckodriver \
@@ -127,7 +127,7 @@ RUN curl -sS -o /usr/local/bin/aws-iam-authenticator https://amazon-eks.s3-us-we
 RUN set -ex \
     && mkdir /tmp/ssm \
     && cd /tmp/ssm \
-    && wget https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/debian_amd64/amazon-ssm-agent.deb \
+    && wget https://s3.amazonaws.com/amazon-ssm-us-east-1/2.3.1644.0/debian_amd64/amazon-ssm-agent.deb \
     && dpkg -i amazon-ssm-agent.deb
 
 # Install env tools for runtimes
@@ -233,8 +233,8 @@ RUN rbenv install $RUBY_27_VERSION; rm -rf /tmp/*; rbenv global $RUBY_27_VERSION
 #**************** END RUBY *****************************************************
 
 #**************** PYTHON *****************************************************
-ENV PYTHON_38_VERSION="3.8.1" \
-    PYTHON_37_VERSION="3.7.6"
+ENV PYTHON_38_VERSION="3.8.8" \
+    PYTHON_37_VERSION="3.7.10"
 
 ENV PYTHON_PIP_VERSION=19.3.1
 
@@ -277,7 +277,7 @@ RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/bin -
 #****************      END PHP     ****************************************************
 
 #****************     GOLANG     ****************************************************
-ENV GOLANG_13_VERSION="1.13.8" \
+ENV GOLANG_13_VERSION="1.13.15" \
     GOLANG_12_VERSION="1.12.17"
 
 RUN goenv install $GOLANG_12_VERSION; rm -rf /tmp/*
@@ -322,7 +322,8 @@ ENV JAVA_11_HOME="/opt/jvm/openjdk-11" \
     ANT_DOWNLOAD_SHA512="c1a9694c3018e248000ff6f46d48af85f537ef3935e0d5256543c58a240084c0aff5289fd9e94cbc40d5442f3cc43592398047f2548fded40d9882be2b40750d" \
     MAVEN_DOWNLOAD_SHA512="c35a1803a6e70a126e80b2b3ae33eed961f83ed74d18fcd16909b2d44d7dada3203f1ffe726c17ef8dcca2dcaa9fca676987befeadc9b9f759967a8cb77181c0" \
     GRADLE_DOWNLOADS_SHA256="14cd15fc8cc8705bd69dcfa3c8fefb27eb7027f5de4b47a8b279218f76895a91 5.4.1\n336b6898b491f6334502d8074a6b8c2d73ed83b92123106bd4bf837f04111043 4.10.3" \
-    ANDROID_SDK_MANAGER_SHA256="92ffee5a1d98d856634e8b71132e8a95d96c83a63fde1099be3d86df3106def9"
+    ANDROID_SDK_MANAGER_SHA256="92ffee5a1d98d856634e8b71132e8a95d96c83a63fde1099be3d86df3106def9" \
+    SBT_DOWNLOAD_SHA256="9bb9212541176d6fcce7bd12e4cf8a9c9649f5b63f88b3aff474e0b02c7cfe58"
 
 ENV JDK_DOWNLOAD_TAR="openjdk-${JDK_VERSION}_linux-x64_bin.tar.gz" \
     JAVA_HOME="$JAVA_11_HOME" \
@@ -409,15 +410,16 @@ RUN set -ex \
       && ln -s /usr/local/gradle-$GRADLE_VERSION/bin/gradle /usr/bin/gradle \
       && rm -rf $GRADLE_PATH 
 
-    # Install SBT
 RUN set -ex \
-    && echo "deb https://dl.bintray.com/sbt/debian /" | tee -a /etc/apt/sources.list.d/sbt.list \
-    && apt-get install -y --no-install-recommends apt-transport-https \
-    && apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv 2EE0EA64E40A89B84B2DF73499E82A75642AC823 \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends sbt=$SBT_VERSION \
-    # Cleanup
-    && rm -fr /var/lib/apt/lists/* /tmp/* /var/tmp/* \
+    # Install SBT
+    && curl -fSL "https://github.com/sbt/sbt/releases/download/v${SBT_VERSION}/sbt-${SBT_VERSION}.tgz" -o sbt.tgz \
+    && echo "${SBT_DOWNLOAD_SHA256} *sbt.tgz" | sha256sum -c - \
+    && tar xzvf sbt.tgz -C /usr/local/bin/ \
+    && rm sbt.tgz
+ENV PATH "/usr/local/bin/sbt/bin:$PATH"
+RUN sbt version
+# Cleanup
+RUN rm -fr /var/lib/apt/lists/* /tmp/* /var/tmp/* \
     && apt-get clean
 #****************     END JAVA     ****************************************************
 

@@ -1,4 +1,4 @@
-# Copyright 2020-2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright 2017-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #
 # Licensed under the Amazon Software License (the "License"). You may not use this file except in compliance with the License.
 # A copy of the License is located at
@@ -11,6 +11,8 @@
 
 FROM amazonlinux:2 AS core
 
+ENV EPEL_REPO="https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm"
+
 # Install git, SSH, and other utilities
 RUN set -ex \
     && yum install -y openssh-clients \
@@ -19,7 +21,7 @@ RUN set -ex \
     && ssh-keyscan -t rsa,dsa -H github.com >> ~/.ssh/known_hosts \
     && ssh-keyscan -t rsa,dsa -H bitbucket.org >> ~/.ssh/known_hosts \
     && chmod 600 ~/.ssh/known_hosts \
-    && amazon-linux-extras install epel -y \
+    && yum install -y $EPEL_REPO \
     && rpm --import https://download.mono-project.com/repo/xamarin.gpg \
     && curl https://download.mono-project.com/repo/centos7-stable.repo | tee /etc/yum.repos.d/mono-centos7-stable.repo \
     && amazon-linux-extras enable corretto8 \
@@ -35,8 +37,7 @@ RUN set -ex \
            ncurses-devel oniguruma-devel openssl openssl-devel perl-DBD-SQLite \
            perl-DBI perl-HTTP-Date perl-IO-Pty-Easy perl-TimeDate perl-YAML-LibYAML \
            postgresql-devel procps-ng python-configobj readline-devel rsync sgml-common \
-           subversion-perl tar tcl tk vim wget which xfsprogs xmlto xorg-x11-server-Xvfb xz-devel \
-    && rm /etc/yum.repos.d/mono-centos7-stable.repo
+           subversion-perl tar tcl tk vim wget which xfsprogs xmlto xorg-x11-server-Xvfb xz-devel 
 
 RUN useradd codebuild-user
 
@@ -46,7 +47,7 @@ FROM core AS tools
 
 # Install Git
 RUN set -ex \
-   && GIT_VERSION=2.27.0 \
+   && GIT_VERSION=2.26.2 \
    && GIT_TAR_FILE=git-$GIT_VERSION.tar.gz \
    && GIT_SRC=https://github.com/git/git/archive/v${GIT_VERSION}.tar.gz  \
    && curl -L -o $GIT_TAR_FILE $GIT_SRC \
@@ -110,22 +111,21 @@ RUN set -ex \
 
 # AWS Tools
 # https://docs.aws.amazon.com/eks/latest/userguide/install-aws-iam-authenticator.html https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ECS_CLI_installation.html
-RUN curl -sS -o /usr/local/bin/aws-iam-authenticator https://amazon-eks.s3.us-west-2.amazonaws.com/1.16.8/2020-04-16/bin/linux/amd64/aws-iam-authenticator \
-    && curl -sS -o /usr/local/bin/kubectl https://amazon-eks.s3.us-west-2.amazonaws.com/1.16.8/2020-04-16/bin/linux/amd64/kubectl \
+RUN curl -sS -o /usr/local/bin/aws-iam-authenticator https://amazon-eks.s3-us-west-2.amazonaws.com/1.14.6/2019-08-22/bin/linux/amd64/aws-iam-authenticator \
+    && curl -sS -o /usr/local/bin/kubectl https://amazon-eks.s3-us-west-2.amazonaws.com/1.14.6/2019-08-22/bin/linux/amd64/kubectl \
     && curl -sS -o /usr/local/bin/ecs-cli https://s3.amazonaws.com/amazon-ecs-cli/ecs-cli-linux-amd64-latest \
-    && curl -sS -L https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_Linux_amd64.tar.gz | tar xz -C /usr/local/bin \
-    && chmod +x /usr/local/bin/kubectl /usr/local/bin/aws-iam-authenticator /usr/local/bin/ecs-cli /usr/local/bin/eksctl
+    && chmod +x /usr/local/bin/kubectl /usr/local/bin/aws-iam-authenticator /usr/local/bin/ecs-cli
 
 # Configure SSM
 RUN set -ex \
-    && yum install -y https://s3.amazonaws.com/amazon-ssm-us-east-1/2.3.1644.0/linux_amd64/amazon-ssm-agent.rpm
+    && yum install -y https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm
 
 # Install env tools for runtimes
 ## Dotnet
 ENV PATH="/root/.dotnet/:/root/.dotnet/tools/:$PATH"
 RUN set -ex  \
 && wget -nv -O /usr/local/bin/dotnet-install.sh https://dot.net/v1/dotnet-install.sh \
-&& chmod +x /usr/local/bin/dotnet-install.sh
+&& chmod +x /usr/local/bin/dotnet-install.sh 
 
 ##nodejs
 ENV N_SRC_DIR="$SRC_DIR/n"
@@ -165,38 +165,41 @@ FROM tools AS runtimes_1
 #****************      JAVA     ****************************************************
 COPY tools/android-accept-licenses.sh /opt/tools/android-accept-licenses.sh
 
-ENV JAVA_11_HOME="/usr/lib/jvm/java-11-amazon-corretto.x86_64" \
-    JDK_11_HOME="/usr/lib/jvm/java-11-amazon-corretto.x86_64" \
-    JRE_11_HOME="/usr/lib/jvm/java-11-amazon-corretto.x86_64" \
+ENV JAVA_11_HOME="/opt/jvm/amazon-corretto-11" \
+    JDK_11_HOME="/opt/jvm/amazon-corretto-11" \
+    JRE_11_HOME="/opt/jvm/amazon-corretto-11" \
     JAVA_8_HOME="/usr/lib/jvm/java-1.8.0-amazon-corretto.x86_64" \
     JDK_8_HOME="/usr/lib/jvm/java-1.8.0-amazon-corretto.x86_64" \
     JRE_8_HOME="/usr/lib/jvm/java-1.8.0-amazon-corretto.x86_64/jre" \
-    ANT_VERSION=1.10.8 \
+    ANT_VERSION=1.10.6 \
     MAVEN_HOME="/opt/maven" \
     MAVEN_VERSION=3.6.3 \
-    INSTALLED_GRADLE_VERSIONS="4.10.3 5.6.4" \
-    GRADLE_VERSION=5.6.4 \
+    INSTALLED_GRADLE_VERSIONS="4.10.3 5.4.1" \
+    GRADLE_VERSION=5.4.1 \
     SBT_VERSION=1.2.8 \
+    JDK_VERSION=11.0.5.10.1 \
     ANDROID_HOME="/usr/local/android-sdk-linux" \
     GRADLE_PATH="$SRC_DIR/gradle" \
     ANDROID_SDK_MANAGER_VER="4333796" \
-    ANDROID_SDK_BUILD_TOOLS="build-tools;29.0.3" \
+    ANDROID_SDK_BUILD_TOOLS="build-tools;29.0.2" \
     ANDROID_SDK_PLATFORM_TOOLS="platforms;android-29" \
     ANDROID_SDK_BUILD_TOOLS_28="build-tools;28.0.3" \
     ANDROID_SDK_PLATFORM_TOOLS_28="platforms;android-28" \
     ANDROID_SDK_EXTRAS="extras;android;m2repository extras;google;m2repository extras;google;google_play_services" \
-    ANT_DOWNLOAD_SHA512="4d80dc6ba23eeec7769085ddb00261b7480b596b56c6e69aa221391acbfb7338eb5855179c88222c8021095ef1f64f43caf2b4f90e8305d7c3128026d4258d06" \
+    JDK_DOWNLOAD_SHA256="4cc9e65e6e3d036b18cfd5fd6c7843d48244e44a60350f7e45036f4825bd3812" \
+    ANT_DOWNLOAD_SHA512="c1a9694c3018e248000ff6f46d48af85f537ef3935e0d5256543c58a240084c0aff5289fd9e94cbc40d5442f3cc43592398047f2548fded40d9882be2b40750d" \
     MAVEN_DOWNLOAD_SHA512="c35a1803a6e70a126e80b2b3ae33eed961f83ed74d18fcd16909b2d44d7dada3203f1ffe726c17ef8dcca2dcaa9fca676987befeadc9b9f759967a8cb77181c0" \
-    GRADLE_DOWNLOADS_SHA256="abc10bcedb58806e8654210f96031db541bcd2d6fc3161e81cb0572d6a15e821 5.6.4\n336b6898b491f6334502d8074a6b8c2d73ed83b92123106bd4bf837f04111043 4.10.3" \
-    ANDROID_SDK_MANAGER_SHA256="92ffee5a1d98d856634e8b71132e8a95d96c83a63fde1099be3d86df3106def9" \
-    SBT_DOWNLOAD_SHA256="9bb9212541176d6fcce7bd12e4cf8a9c9649f5b63f88b3aff474e0b02c7cfe58"
+    GRADLE_DOWNLOADS_SHA256="14cd15fc8cc8705bd69dcfa3c8fefb27eb7027f5de4b47a8b279218f76895a91 5.4.1\n336b6898b491f6334502d8074a6b8c2d73ed83b92123106bd4bf837f04111043 4.10.3" \
+    ANDROID_SDK_MANAGER_SHA256="92ffee5a1d98d856634e8b71132e8a95d96c83a63fde1099be3d86df3106def9"
 
 ARG MAVEN_CONFIG_HOME="/root/.m2"
-ENV JAVA_HOME="$JAVA_11_HOME" \
+ENV JDK_DOWNLOAD_TAR="amazon-corretto-${JDK_VERSION}-linux-x64.tar.gz" \
+    JAVA_HOME="$JAVA_11_HOME" \
     JDK_HOME="$JDK_11_HOME" \
     JRE_HOME="$JRE_11_HOME"
 
-ENV PATH="${PATH}:/opt/tools:${ANDROID_HOME}/tools:${ANDROID_HOME}/tools/bin:${ANDROID_HOME}/platform-tools"
+ENV JDK_DOWNLOAD_URL="https://d3pxv6yz143wms.cloudfront.net/${JDK_VERSION}/${JDK_DOWNLOAD_TAR}" \
+    PATH="${PATH}:/opt/tools:${ANDROID_HOME}/tools:${ANDROID_HOME}/tools/bin:${ANDROID_HOME}/platform-tools"
 
 RUN set -ex \
     # Install Amazon Corretto 8
@@ -204,7 +207,7 @@ RUN set -ex \
     # Ensure Java cacerts symlink points to valid location
     && update-ca-trust
 
-# Install Android SDK manager
+    # Install Android SDK manager
 RUN set -x \
     && wget -nv "https://dl.google.com/android/repository/sdk-tools-linux-${ANDROID_SDK_MANAGER_VER}.zip" -O /tmp/android-sdkmanager.zip \
     && echo "${ANDROID_SDK_MANAGER_SHA256} /tmp/android-sdkmanager.zip" | sha256sum -c - \
@@ -214,16 +217,20 @@ RUN set -x \
     && chown -R root.root ${ANDROID_HOME} \
     && ln -s ${ANDROID_HOME}/tools/android /usr/bin/android
 
-# Install Android
+    # Install Android
 RUN set -x\
     && android-accept-licenses.sh "env JAVA_HOME=$JAVA_8_HOME JRE_HOME=$JRE_8_HOME JDK_HOME=$JDK_8_HOME sdkmanager --verbose platform-tools ${ANDROID_SDK_BUILD_TOOLS} ${ANDROID_SDK_PLATFORM_TOOLS} ${ANDROID_SDK_EXTRAS} ${ANDROID_SDK_NDK_TOOLS}" | grep -v '\[=' \
     && android-accept-licenses.sh "env JAVA_HOME=$JAVA_8_HOME JRE_HOME=$JRE_8_HOME JDK_HOME=$JDK_8_HOME sdkmanager --verbose platform-tools ${ANDROID_SDK_BUILD_TOOLS_28} ${ANDROID_SDK_PLATFORM_TOOLS_28}" | grep -v '\[=' \
     && android-accept-licenses.sh "env JAVA_HOME=$JAVA_8_HOME JRE_HOME=$JRE_8_HOME JDK_HOME=$JDK_8_HOME sdkmanager --licenses"
 
-RUN set -x \
     # Install Amazon Corretto 11
     # Note: We will use update-alternatives to make sure JDK11 has higher priority for all the tools
-    && yum install -y java-11-amazon-corretto \
+RUN set -x \
+    && mkdir -p $JAVA_HOME \
+    && curl -LSso /var/tmp/$JDK_DOWNLOAD_TAR $JDK_DOWNLOAD_URL \
+    && echo "$JDK_DOWNLOAD_SHA256 /var/tmp/$JDK_DOWNLOAD_TAR" | sha256sum -c - \
+    && tar xzvf /var/tmp/$JDK_DOWNLOAD_TAR -C $JAVA_HOME --strip-components=1 \
+    && rm /var/tmp/$JDK_DOWNLOAD_TAR \
     && for tool_path in $JAVA_HOME/bin/*; do \
           tool=`basename $tool_path`; \
           update-alternatives --install /usr/bin/$tool $tool $tool_path 10000; \
@@ -235,10 +242,10 @@ RUN set -x \
     && echo "$ANT_DOWNLOAD_SHA512 /var/tmp/apache-ant-$ANT_VERSION-bin.tar.gz" | sha512sum -c - \
     && tar -xzf /var/tmp/apache-ant-$ANT_VERSION-bin.tar.gz -C /opt \
     && rm /var/tmp/apache-ant-$ANT_VERSION-bin.tar.gz \
-    && update-alternatives --install /usr/bin/ant ant /opt/apache-ant-$ANT_VERSION/bin/ant 10000
+    && update-alternatives --install /usr/bin/ant ant /opt/apache-ant-$ANT_VERSION/bin/ant 10000 
 
+# Install Maven
 RUN set -ex \
-    # Install Maven
     && mkdir -p $MAVEN_HOME \
     && curl -LSso /var/tmp/apache-maven-$MAVEN_VERSION-bin.tar.gz https://apache.org/dist/maven/maven-3/$MAVEN_VERSION/binaries/apache-maven-$MAVEN_VERSION-bin.tar.gz \
     && echo "$MAVEN_DOWNLOAD_SHA512 /var/tmp/apache-maven-$MAVEN_VERSION-bin.tar.gz" | sha512sum -c - \
@@ -262,17 +269,14 @@ RUN set -ex \
        && if [ "$version" != "$GRADLE_VERSION" ]; then rm -rf "/usr/local/gradle-$version"; fi; \
      }; done \
     # Install default GRADLE_VERSION to path
-    && ln -s /usr/local/gradle-$GRADLE_VERSION/bin/gradle /usr/bin/gradle \
-    && rm -rf $GRADLE_PATH \
+      && ln -s /usr/local/gradle-$GRADLE_VERSION/bin/gradle /usr/bin/gradle \
+      && rm -rf $GRADLE_PATH \
     # Install SBT
-    && curl -fSL "https://github.com/sbt/sbt/releases/download/v${SBT_VERSION}/sbt-${SBT_VERSION}.tgz" -o sbt.tgz \
-    && echo "${SBT_DOWNLOAD_SHA256} *sbt.tgz" | sha256sum -c - \
-    && tar xzvf sbt.tgz -C /usr/local/bin/ \
-    && rm sbt.tgz
-ENV PATH "/usr/local/bin/sbt/bin:$PATH"
-RUN sbt version
-# Cleanup
-RUN rm -fr /tmp/* /var/tmp/*
+    && wget -nv https://dl.bintray.com/sbt/rpm/sbt-$SBT_VERSION.rpm \
+    && yum install -y sbt-$SBT_VERSION.rpm \
+    && rm -fr sbt-$SBT_VERSION.rpm \
+    # Cleanup
+    && rm -fr /tmp/* /var/tmp/*
 #****************     END JAVA     ****************************************************
 
 
@@ -280,9 +284,9 @@ RUN rm -fr /tmp/* /var/tmp/*
 
 # Install Powershell Core
 # See instructions at https://docs.microsoft.com/en-us/powershell/scripting/setup/installing-powershell-core-on-linux
-ENV POWERSHELL_VERSION 6.2.6
+ENV POWERSHELL_VERSION 6.2.1
 ENV POWERSHELL_DOWNLOAD_URL https://github.com/PowerShell/PowerShell/releases/download/v$POWERSHELL_VERSION/powershell-$POWERSHELL_VERSION-linux-x64.tar.gz
-ENV POWERSHELL_DOWNLOAD_SHA ee5512d869ab9bd59bf17f417ff93013e0a169db91cf848ba2570d4818e05e17
+ENV POWERSHELL_DOWNLOAD_SHA E8287687C99162BF70FEFCC2E492F3B54F80BE880D86B9A0EC92C71B05C40013
 
 RUN set -ex \
     && curl -SL $POWERSHELL_DOWNLOAD_URL --output powershell.tar.gz \
@@ -297,7 +301,7 @@ RUN set -ex \
 
 #****************      NODEJS     ****************************************************
 
-ENV NODE_10_VERSION="10.23.0"
+ENV NODE_10_VERSION="10.19.0"
 
 RUN  n $NODE_10_VERSION && npm install --save-dev -g -f grunt && npm install --save-dev -g -f grunt-cli && npm install --save-dev -g -f webpack \
      && curl -sSL https://dl.yarnpkg.com/rpm/yarn.repo | tee /etc/yum.repos.d/yarn.repo \
@@ -310,28 +314,28 @@ RUN  n $NODE_10_VERSION && npm install --save-dev -g -f grunt && npm install --s
 
 #**************** RUBY *********************************************************
 
-ENV RUBY_26_VERSION="2.6.6"
+ENV RUBY_26_VERSION="2.6.5"
 
 RUN rbenv install $RUBY_26_VERSION; rm -rf /tmp/*; rbenv global $RUBY_26_VERSION;ruby -v
 
 #**************** END RUBY *****************************************************
 
 #**************** PYTHON *****************************************************
-ENV PYTHON_37_VERSION="3.7.10"
-ENV PYTHON_PIP_VERSION=20.2.4
+ENV PYTHON_37_VERSION="3.7.6"
+ENV PYTHON_PIP_VERSION=19.3.1
 
 COPY tools/runtime_configs/python/$PYTHON_37_VERSION /root/.pyenv/plugins/python-build/share/python-build/$PYTHON_37_VERSION
 RUN   env PYTHON_CONFIGURE_OPTS="--enable-shared" pyenv install $PYTHON_37_VERSION; rm -rf /tmp/*
 RUN   pyenv global  $PYTHON_37_VERSION
 RUN set -ex \
     && pip3 install --no-cache-dir --upgrade --force-reinstall "pip==$PYTHON_PIP_VERSION" \
-    && pip3 install --no-cache-dir --upgrade "PyYAML==5.3.1" \
-    && pip3 install --no-cache-dir --upgrade setuptools wheel aws-sam-cli awscli boto3 pipenv virtualenv --use-feature=2020-resolver
+    && pip3 install --no-cache-dir --upgrade "PyYAML==5.1.2" \
+    && pip3 install --no-cache-dir --upgrade setuptools wheel aws-sam-cli awscli boto3 pipenv virtualenv
 
 #**************** END PYTHON *****************************************************
 
 #****************      PHP     ****************************************************
-ENV PHP_73_VERSION="7.3.19"
+ENV PHP_73_VERSION="7.3.13"
 
 COPY tools/runtime_configs/php/$PHP_73_VERSION /root/.phpenv/plugins/php-build/share/php-build/definitions/$PHP_73_VERSION
 RUN phpenv install $PHP_73_VERSION; rm -rf /tmp/*; phpenv global $PHP_73_VERSION
@@ -342,7 +346,7 @@ RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/bin -
 #****************      END PHP     ****************************************************
 
 #****************     GOLANG     ****************************************************
-ENV GOLANG_13_VERSION="1.13.15" \
+ENV GOLANG_13_VERSION="1.13.8" \
     GOLANG_12_VERSION="1.12.17"
 
 ENV GOENV_DISABLE_GOPATH=1
@@ -357,16 +361,16 @@ RUN go get -u github.com/golang/dep/cmd/dep
 #****************      END GOLANG     ****************************************************
 
 #=======================End of layer: runtimes_1  =================
-FROM runtimes_1 AS runtimes_2
+FROM runtimes_1 AS al2_v1
 
-#Docker 19
+#Docker 18
 ENV DOCKER_BUCKET="download.docker.com" \
     DOCKER_CHANNEL="stable" \
     DIND_COMMIT="3b5fac462d21ca164b3778647420016315289034" \
-    DOCKER_COMPOSE_VERSION="1.26.0"
+    DOCKER_COMPOSE_VERSION="1.24.0" 
 
-ENV DOCKER_SHA256="0f4336378f61ed73ed55a356ac19e46699a995f2aff34323ba5874d131548b9e"
-ENV DOCKER_VERSION="19.03.11"
+ENV DOCKER_SHA256="1f3f6774117765279fce64ee7f76abbb5f260264548cf80631d68fb2d795bb09"
+ENV DOCKER_VERSION="18.09.6"
 
 VOLUME /var/lib/docker
 
@@ -376,7 +380,7 @@ RUN set -ex \
     && tar --extract --file docker.tgz --strip-components 1  --directory /usr/local/bin/ \
     && rm docker.tgz \
     && docker -v \
-    # set up subuid/subgid so that "--userns-remap=default" works out-of-the-box
+# set up subuid/subgid so that "--userns-remap=default" works out-of-the-box
     && groupadd dockremap \
     && useradd -g dockremap dockremap \
     && echo 'dockremap:165536:65536' >> /etc/subuid \
@@ -386,31 +390,12 @@ RUN set -ex \
     && chmod +x /usr/local/bin/dind /usr/local/bin/docker-compose \
     && docker-compose version
 
-#Python 3.8
-ENV PYTHON_38_VERSION="3.8.8"
-
-COPY tools/runtime_configs/python/$PYTHON_38_VERSION /root/.pyenv/plugins/python-build/share/python-build/$PYTHON_38_VERSION
-RUN   env PYTHON_CONFIGURE_OPTS="--enable-shared" pyenv install $PYTHON_38_VERSION; rm -rf /tmp/*
-RUN   pyenv global  $PYTHON_38_VERSION
-RUN set -ex \
-    && pip3 install --no-cache-dir --upgrade --force-reinstall "pip==$PYTHON_PIP_VERSION" \
-    && pip3 install --no-cache-dir --upgrade "PyYAML==5.3.1" \
-    && pip3 install --no-cache-dir --upgrade setuptools wheel aws-sam-cli awscli boto3 pipenv virtualenv --use-feature=2020-resolver
-
-# Node 12
-ENV NODE_12_VERSION="12.19.1"
-
-RUN  n $NODE_12_VERSION && npm install --save-dev -g -f grunt && npm install --save-dev -g -f grunt-cli && npm install --save-dev -g -f webpack \
-     && rm -rf /tmp/*
-
-#=======================End of layer: runtimes_2  =================
-FROM runtimes_2 AS runtimes_3
-
-#DotNet 3.1
-ENV DOTNET_31_SDK_VERSION="3.1.301"
+#DotNet
+ENV DOTNET_22_SDK_VERSION="2.2.402"
 ENV DOTNET_ROOT="/root/.dotnet"
-
-RUN /usr/local/bin/dotnet-install.sh -v $DOTNET_31_SDK_VERSION \
+RUN rm  -rf /root/.dotnet/sdk/*
+RUN set -ex  \
+    && /usr/local/bin/dotnet-install.sh -v $DOTNET_22_SDK_VERSION \
     && dotnet --list-sdks \
     && rm -rf /tmp/*
 
@@ -424,33 +409,19 @@ RUN set -ex \
     && rm -rf warmup \
     && rm -rf /tmp/NuGetScratch
 
-# Install GitVersion
-ENV GITVERSION_VERSION="5.3.5"
-RUN set -ex \
-    && dotnet tool install --global GitVersion.Tool --version $GITVERSION_VERSION \
-    && ln -s ~/.dotnet/tools/dotnet-gitversion /usr/local/bin/gitversion
+#Node 8
+ENV NODE_8_VERSION=8.16.0
+RUN n $NODE_8_VERSION && npm install --save-dev -g -f grunt && npm install --save-dev -g -f grunt-cli && npm install --save-dev -g -f webpack
 
-#Ruby 2.7
-ENV RUBY_27_VERSION="2.7.2"
-RUN rbenv install $RUBY_27_VERSION; rm -rf /tmp/*; rbenv global $RUBY_27_VERSION;ruby -v
+#Activate the desired runtime versions.
+RUN n $NODE_10_VERSION
+RUN pyenv  global $PYTHON_37_VERSION
+RUN phpenv global $PHP_73_VERSION
+RUN rbenv  global $RUBY_26_VERSION
+RUN goenv  global $GOLANG_13_VERSION
 
-#Golang 14
-ENV GOLANG_14_VERSION="1.14.12"
-RUN goenv install $GOLANG_14_VERSION; rm -rf /tmp/*; \
-    goenv global  $GOLANG_14_VERSION
-
-#Php 7.4
-ENV PHP_74_VERSION="7.4.7"
-COPY tools/runtime_configs/php/$PHP_74_VERSION /root/.phpenv/plugins/php-build/share/php-build/definitions/$PHP_74_VERSION
-RUN phpenv install $PHP_74_VERSION; rm -rf /tmp/*; phpenv global $PHP_74_VERSION
-RUN echo "memory_limit = 1G;" >> "/root/.phpenv/versions/$PHP_74_VERSION/etc/conf.d/memory.ini"
-
-# Install Composer globally
-RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/bin --filename=composer
-#****************      END PHP     ****************************************************
-
-#===================END of runtimes_3 ==============
-FROM runtimes_3 AS al2_v3
+ENV MAVEN_CONFIG=$MAVEN_CONFIG_HOME
+ENV DEBIAN_FRONTEND="noninteractive" 
 
 # Configure SSH
 COPY ssh_config /root/.ssh/config
@@ -462,5 +433,5 @@ COPY amazon-ssm-agent.json          /etc/amazon/ssm/
 
 ENTRYPOINT ["dockerd-entrypoint.sh"]
 
-#=======================End of layer: al2_v3  =================
+#=======================End of layer: al2_v1  =================
 
